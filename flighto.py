@@ -2,6 +2,7 @@ from pprint import pprint
 import math
 import requests
 import sys
+import time
 
 stopovers = [
   'AMS',
@@ -39,6 +40,8 @@ stopovers = [
   'YYT',
   'YYZ',
 ]
+
+exclude_airlines = ['']
 
 first_url = 'http://www.hipmunk.com/api/flights/v3/load_search_first'
 search_url = 'http://www.hipmunk.com/api/flights/v3/load_search'
@@ -81,15 +84,21 @@ def one_query(date0, from0, to0, offset=''):
 
   try:
     print("requesting", url, payload)
+    time.sleep(2.5)
     r = requests.post(url, headers=headers, data=payload)
   except:
     print('failed to request', sys.exc_info()[0])
-    return []
+    return ([], True, '')
 
-  response = r.json()
+  try:
+    response = r.json()
+  except:
+    print('failed to decode json', sys.exc_info()[0], r.text)
+    return ([], True, '')
+
   if 'errors' in response:
     print(response['errors'])
-    return []
+    return ([], True, '')
 
   if 'routings' in response:
     routings.update(response['routings'])
@@ -114,11 +123,16 @@ def one_query(date0, from0, to0, offset=''):
     my_legs = [legs[leg_iden] for leg_iden in leg_idens]
 
     layovers = []
-    # airlines = []
     flights = []
 
-    # calculate layovers and airlines
+    skip_itin = False
+    # calculate layovers
     for i, leg in enumerate(my_legs):
+      if 'from_code' not in leg or 'to_code' not in leg:
+        print('leg is missing from_code or to_code?')
+        pprint(leg)
+        skip_itin = True
+        break
       from_code = leg['from_code']
       to_code = leg['to_code']
 
@@ -132,10 +146,15 @@ def one_query(date0, from0, to0, offset=''):
 
       flight = leg['operating_num'] or leg['marketing_num']
       airline, flight_no = flight
+      if airline in exclude_airlines:
+        skip_itin = True
+        break
       flights.append(airline + str(flight_no))
 
+    if skip_itin:
+      continue
+
     results.append({
-      'agony': itin['agony'],
       'arrive_iso': my_legs[-1]['arrive_iso'],
       'depart_iso': my_legs[0]['depart_iso'],
       'arrive': my_legs[-1]['arrive'],
@@ -146,6 +165,7 @@ def one_query(date0, from0, to0, offset=''):
       'time': hours(my_legs[-1]['arrive'] - my_legs[0]['depart']),
     })
 
+  print("got {} results".format(len(results)))
   return (results, response['done'], response['last_offset'])
 
 # filtered trips where price and time is <= 2 * the minimum
@@ -157,9 +177,11 @@ def one_query(date0, from0, to0, offset=''):
 #   arrive_iso: iso in local time,
 #   arrive: epoch seconds,
 #   price: USD,
-#   agony: number,
 # }]
 def one_trip(date0, from0, to0):
+  if from0 == to0:
+    return []
+
   done = False
   offset = ""
   all_results = []
@@ -178,7 +200,6 @@ def one_trip(date0, from0, to0):
 #   arrive_iso: iso in local time,
 #   arrive: epoch seconds,
 #   price: USD,
-#   agony: number,
 # }]
 def try_stopover(date0, from0, to0, stopover):
   part1 = one_trip(date0, from0, stopover)
@@ -197,7 +218,7 @@ def try_stopover(date0, from0, to0, stopover):
   for result1 in part1:
     for result2 in part2:
       layover_time = hours(result2['depart'] - result1['arrive'])
-      if layover_time < 1:
+      if layover_time < 2:
         # layover is too short
         continue
 
@@ -205,7 +226,6 @@ def try_stopover(date0, from0, to0, stopover):
       new_layover = {'airport': stopover, 'layover': layover_time}
 
       new_result = {
-        'agony': result1['agony'] + result2['agony'],
         'arrive': result2['arrive'],
         'arrive_iso': result2['arrive_iso'],
         'depart': result1['depart'],
@@ -252,4 +272,5 @@ def run(date0, from0, to0):
 
   return keep_best(all_results)
 
+exclude_airlines = ['2V']
 pprint(run('11/21/2018', 'BCN', 'MDT'))
