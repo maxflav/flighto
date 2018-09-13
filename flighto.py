@@ -1,4 +1,6 @@
 from pprint import pprint
+import argparse
+import dateutil.parser
 import math
 import requests
 import sys
@@ -64,16 +66,24 @@ headers = {
 routings = {}
 legs = {}
 
+departbefore = None
+departafter = None
+arrivebefore = None
+arriveafter = None
+
+maxprice = None
+maxtime = None
+
 # approximate to 2 decimals
 def hours(minutes):
   return math.floor(minutes / 36) / 100
 
 # ([trips], done=True/False, last_offset)
-def one_query(date0, from0, to0, offset=''):
+def one_query(date, frm, to, offset='', arriving=False, departing=False):
   payload = {
-    'date0': date0,
-    'from0': from0,
-    'to0': to0,
+    'date0': date,
+    'from0': frm,
+    'to0': to,
   }
 
   if offset == '':
@@ -83,15 +93,19 @@ def one_query(date0, from0, to0, offset=''):
     payload['offset'] = offset
 
   try:
-    print("requesting", url, payload)
+    print('requesting', url, payload)
     time.sleep(2.5)
     r = requests.post(url, headers=headers, data=payload)
+  except (KeyboardInterrupt, SystemExit):
+    raise
   except:
     print('failed to request', sys.exc_info()[0])
     return ([], True, '')
 
   try:
     response = r.json()
+  except (KeyboardInterrupt, SystemExit):
+    raise
   except:
     print('failed to decode json', sys.exc_info()[0], r.text)
     return ([], True, '')
@@ -104,11 +118,13 @@ def one_query(date0, from0, to0, offset=''):
     routings.update(response['routings'])
   if 'legs' in response:
     legs.update(response['legs'])
+
   if 'itins' in response:
     itins = response['itins'].values()
   else:
     return ([], True, '')
 
+  print('got {} itins'.format(len(itins)))
   # construct my results from these itin objects
   results = []
 
@@ -154,23 +170,49 @@ def one_query(date0, from0, to0, offset=''):
     if skip_itin:
       continue
 
+
+    if maxprice and itin['price'] > maxprice:
+      continue
+
+    hr = hours(my_legs[-1]['arrive'] - my_legs[0]['depart'])
+    if maxtime and hr > maxtime:
+      continue
+
+
+    arrive_iso = my_legs[-1]['arrive_iso']
+    if arriving and (arrivebefore or arriveafter):
+      arrive_dt = dateutil.parser.parse(arrive_iso)
+      arrive_hhmm = arrive_dt.strftime('%H%M')
+      if arrivebefore and arrive_hhmm > arrivebefore:
+        continue
+      if arriveafter and arrive_hhmm < arriveafter:
+        continue
+
+    depart_iso = my_legs[0]['depart_iso']
+    if departing and (departbefore or departafter):
+      depart_dt = dateutil.parser.parse(depart_iso)
+      depart_hhmm = depart_dt.strftime('%H%M')
+      if departbefore and depart_hhmm > departbefore:
+        continue
+      if departafter and depart_hhmm < departafter:
+        continue
+
     results.append({
-      'arrive_iso': my_legs[-1]['arrive_iso'],
-      'depart_iso': my_legs[0]['depart_iso'],
+      'arrive_iso': arrive_iso,
+      'depart_iso': depart_iso,
       'arrive': my_legs[-1]['arrive'],
       'depart': my_legs[0]['depart'],
       'flights': flights,
       'layovers': layovers,
       'price': itin['price'],
-      'time': hours(my_legs[-1]['arrive'] - my_legs[0]['depart']),
+      'time': hr,
     })
 
-  print("got {} results".format(len(results)))
+  print('got {} viable results'.format(len(results)))
   return (results, response['done'], response['last_offset'])
 
-# filtered trips where price and time is <= 2 * the minimum
 # [{
-#   layovers: [{airport: "CODE", layover: hours}],
+#   layovers: [{airport: 'CODE', layover: hours}],
 #   time: hours,
 #   depart_iso: iso in local time,
 #   depart: epoch seconds,
@@ -178,22 +220,22 @@ def one_query(date0, from0, to0, offset=''):
 #   arrive: epoch seconds,
 #   price: USD,
 # }]
-def one_trip(date0, from0, to0):
-  if from0 == to0:
+def one_trip(date, frm, to, arriving=False, departing=False):
+  if frm == to:
     return []
 
   done = False
-  offset = ""
+  offset = ''
   all_results = []
   while not done:
-    (partial_results, done, offset) = one_query(date0, from0, to0, offset)
+    (partial_results, done, offset) = one_query(date, frm, to, offset, arriving=arriving, departing=departing)
     all_results += partial_results
 
   return all_results
 
 # same return value as one_trip
 # [{
-#   layovers: [{airport: "CODE", layover: hours}],
+#   layovers: [{airport: 'CODE', layover: hours}],
 #   time: hours,
 #   depart_iso: iso in local time,
 #   depart: epoch seconds,
@@ -201,12 +243,12 @@ def one_trip(date0, from0, to0):
 #   arrive: epoch seconds,
 #   price: USD,
 # }]
-def try_stopover(date0, from0, to0, stopover):
-  part1 = one_trip(date0, from0, stopover)
+def try_stopover(date, frm, to, stopover):
+  part1 = one_trip(date, frm, stopover, departing=True)
   if len(part1) == 0:
     return []
 
-  part2 = one_trip(date0, stopover, to0)
+  part2 = one_trip(date, stopover, to, arriving=True)
   if len(part2) == 0:
     return []
 
@@ -223,6 +265,15 @@ def try_stopover(date0, from0, to0, stopover):
         continue
 
       total_time = result1['time'] + result2['time'] + layover_time
+      if maxtime and total_time > maxtime:
+        # too long
+        continue
+
+      total_price = result1['price'] + result2['price']
+      if total_price > maxprice:
+        # too expensive
+        continue
+
       new_layover = {'airport': stopover, 'layover': layover_time}
 
       new_result = {
@@ -232,7 +283,7 @@ def try_stopover(date0, from0, to0, stopover):
         'depart_iso': result1['depart_iso'],
         'flights': result1['flights'] + result2['flights'],
         'layovers': result1['layovers'] + [new_layover] + result2['layovers'],
-        'price': result1['price'] + result2['price'],
+        'price': total_price,
         'time': total_time,
       }
       stopover_results.append(new_result)
@@ -243,12 +294,18 @@ def keep_best(results):
   if len(results) == 0:
     return []
 
-  results = sorted(results, key=lambda result: result['price'])
+  results = sorted(results, key=lambda result: (result['price'], result['time']))
   reduced_results = [results[0]]
   # cheapest first
   # then, remove any that are longer than the previous
   # duration must be getting shorter and shorter
   for result in results[1:]:
+    if maxtime and result['time'] > maxtime:
+      continue
+
+    if maxprice and result['price'] > maxprice:
+      break
+
     prev_time = reduced_results[-1]['time']
     if result['time'] >= prev_time:
       continue
@@ -256,10 +313,9 @@ def keep_best(results):
 
   return reduced_results
 
-def run(date0, from0, to0):
+def run(date, frm, to):
   # first, try the regular route with no stopover
-  all_results = one_trip(date0, from0, to0)
-  # print("Finished direct trip")
+  all_results = one_trip(date, frm, to, arriving=True, departing=True)
 
   # then, try with stopovers
   for stopover in stopovers:
@@ -267,10 +323,34 @@ def run(date0, from0, to0):
     all_results = keep_best(all_results)
     pprint(all_results)
 
-    stopover_results = try_stopover(date0, from0, to0, stopover=stopover)
+    stopover_results = try_stopover(date, frm, to, stopover=stopover)
     all_results = all_results + stopover_results
 
   return keep_best(all_results)
 
-exclude_airlines = ['2V']
-pprint(run('11/21/2018', 'BCN', 'MDT'))
+parser = argparse.ArgumentParser()
+parser.add_argument('--date', type=str, help='e.g. 11/21/2018', required=True)
+parser.add_argument('--from', type=str, help='e.g. BCN', required=True, dest='frm')
+parser.add_argument('--to', type=str, help='e.g. MDT', required=True)
+parser.add_argument('--departbefore', type=str, help='HHMM e.g. 2030, for 8:30pm')
+parser.add_argument('--departafter', type=str)
+parser.add_argument('--arrivebefore', type=str)
+parser.add_argument('--arriveafter', type=str)
+parser.add_argument('--maxprice', type=int, help='USD e.g. 1000')
+parser.add_argument('--maxtime', type=int, help='in hours, e.g. 20')
+
+args = parser.parse_args()
+
+departbefore = args.departbefore
+departafter = args.departafter
+arrivebefore = args.arrivebefore
+arriveafter = args.arriveafter
+
+maxprice = args.maxprice
+maxtime = args.maxtime
+
+pprint(run(
+  date=args.date,
+  frm=args.frm,
+  to=args.to
+))
