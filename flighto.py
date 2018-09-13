@@ -3,19 +3,45 @@ import math
 import requests
 import sys
 
-# stopovers = ['LHR', 'LGW', 'BOS', 'JFK']
-# stopovers = ['BOS', 'YYZ', 'FRA', 'PHL']
-# stopovers = ['LIS', 'LGA', 'BWI', 'IAD']
-# stopovers = ['CLT', 'PIT', 'EWR', 'CDG']
-# stopovers = ['AMS', 'DFW', 'ATL', 'ORD']
-# stopovers = ['MCO', 'DEN', 'RDU', 'FCO']
-# stopovers = ['DUB', 'MAN', 'BER', 'OPO', 'YHZ', 'PVD']
-stopovers = ['MDW', 'DCA', 'DTW', 'YYT']
-
-# american stopovers: ['BOS', 'JFK', 'YYZ', 'PHL', 'LGA', 'BWI', 'IAD', 'CLT', 'PIT', 'EWR', 'DFW', 'ATL', 'ORD', 'MCO', 'DEN', 'RDU', 'YHZ', 'PVD', 'MDW', 'DCA', 'DTW', 'YYT']
-# european stopovers: ['LHR', 'LGW', 'FRA', 'LIS', 'CDG', 'AMS', 'FCO', 'DUB', 'MAN', 'BER', 'OPO']
+stopovers = [
+  'AMS',
+  'ATL',
+  'BER',
+  'BOS',
+  'BWI',
+  'CDG',
+  'CLT',
+  'DCA',
+  'DEN',
+  'DFW',
+  'DTW',
+  'DUB',
+  'EWR',
+  'FCO',
+  'FRA',
+  'IAD',
+  'JFK',
+  'LGA',
+  'LGW',
+  'LHR',
+  'LIS',
+  'MAN',
+  'MCO',
+  'MDW',
+  'OPO',
+  'ORD',
+  'PDL',
+  'PHL',
+  'PIT',
+  'PVD',
+  'RDU',
+  'YHZ',
+  'YYT',
+  'YYZ',
+]
 
 first_url = 'http://www.hipmunk.com/api/flights/v3/load_search_first'
+search_url = 'http://www.hipmunk.com/api/flights/v3/load_search'
 
 headers = {
     'accept':'application/json, text/javascript, */*; q=0.01',
@@ -32,76 +58,56 @@ headers = {
     'x-requested-with':'XMLHttpRequest',
 }
 
+routings = {}
+legs = {}
+
 # approximate to 2 decimals
 def hours(minutes):
   return math.floor(minutes / 36) / 100
 
-
-def get_price_limit(results):
-  return 1300
-
-  # if len(results) == 0:
-  #   return 1500
-
-  # min_price = min(results, key=lambda result: result['price'])['price']
-  # print("current min price: {}".format(min_price))
-  # price_limit = min_price * 2.5
-  # price_limit = max(price_limit, 200)
-  # price_limit = min(price_limit, 1000)
-  # return price_limit
-
-
-def get_time_limit(results):
-  return 24
-
-  # if len(results) == 0:
-  #   return 20
-
-  # min_time = min(results, key=lambda result: result['time'])['time']
-  # print("current min time: {}".format(min_time))
-  # time_limit = min_time * 2
-  # time_limit = max(time_limit, 1)
-  # time_limit = min(time_limit, 20)
-  # return time_limit
-
-
-# filtered trips where price and time is <= 2 * the minimum
-# [{
-#   layovers: [{airport: "CODE", layover: hours}],
-#   time: hours,
-#   depart_iso: iso in local time,
-#   depart: epoch seconds,
-#   arrive_iso: iso in local time,
-#   arrive: epoch seconds,
-#   price: USD,
-#   agony: number,
-# }]
-def one_trip(date0, from0, to0):
+# ([trips], done=True/False, last_offset)
+def one_query(date0, from0, to0, offset=''):
   payload = {
     'date0': date0,
     'from0': from0,
     'to0': to0,
   }
 
+  if offset == '':
+    url = first_url
+  else:
+    url = search_url
+    payload['offset'] = offset
+
   try:
-    r = requests.post(first_url, headers=headers, data=payload)
+    print("requesting", url, payload)
+    r = requests.post(url, headers=headers, data=payload)
   except:
     print('failed to request', sys.exc_info()[0])
-    return
+    return []
 
   response = r.json()
   if 'errors' in response:
     print(response['errors'])
-    return
+    return []
 
-  routings = response['routings']
-  legs = response['legs']
-  itins = response['itins'].values()
+  if 'routings' in response:
+    routings.update(response['routings'])
+  if 'legs' in response:
+    legs.update(response['legs'])
+  if 'itins' in response:
+    itins = response['itins'].values()
+  else:
+    return ([], True, '')
 
   # construct my results from these itin objects
   results = []
 
   for itin in itins:
+    if not itin: 
+      continue
+    if 'routing_idens' not in itin:
+      continue
     routing_iden = itin['routing_idens'][0]
     my_routing = routings[routing_iden]
     leg_idens = my_routing['leg_idens']
@@ -126,13 +132,10 @@ def one_trip(date0, from0, to0):
 
       flight = leg['operating_num'] or leg['marketing_num']
       airline, flight_no = flight
-      # if airline not in airlines:
-      #   airlines.append(airline)
       flights.append(airline + str(flight_no))
 
     results.append({
       'agony': itin['agony'],
-      # 'airlines': airlines,
       'arrive_iso': my_legs[-1]['arrive_iso'],
       'depart_iso': my_legs[0]['depart_iso'],
       'arrive': my_legs[-1]['arrive'],
@@ -143,27 +146,28 @@ def one_trip(date0, from0, to0):
       'time': hours(my_legs[-1]['arrive'] - my_legs[0]['depart']),
     })
 
-  # filter to <= min price * 2 and <= min time * 2
+  return (results, response['done'], response['last_offset'])
 
-  price_limit = get_price_limit(results)
-  time_limit = get_time_limit(results)
+# filtered trips where price and time is <= 2 * the minimum
+# [{
+#   layovers: [{airport: "CODE", layover: hours}],
+#   time: hours,
+#   depart_iso: iso in local time,
+#   depart: epoch seconds,
+#   arrive_iso: iso in local time,
+#   arrive: epoch seconds,
+#   price: USD,
+#   agony: number,
+# }]
+def one_trip(date0, from0, to0):
+  done = False
+  offset = ""
+  all_results = []
+  while not done:
+    (partial_results, done, offset) = one_query(date0, from0, to0, offset)
+    all_results += partial_results
 
-  # filtered_results = results
-  filtered_results = [result for result in results if result['price'] <= price_limit and result['time'] <= time_limit]
-  sorted_results = sorted(filtered_results, key=lambda result: result['agony'])
-
-  # de-dupe on the list of flights
-  flight_lists = set()
-  deduped_results = []
-  for result in sorted_results:
-    flight_tuple = tuple(result['flights'])
-    if flight_tuple in flight_lists:
-      continue
-    flight_lists.add(flight_tuple)
-    deduped_results.append(result)
-
-  return deduped_results
-
+  return all_results
 
 # same return value as one_trip
 # [{
@@ -176,7 +180,7 @@ def one_trip(date0, from0, to0):
 #   price: USD,
 #   agony: number,
 # }]
-def try_stopover(date0, from0, to0, stopover, price_limit=1500, time_limit=20):
+def try_stopover(date0, from0, to0, stopover):
   part1 = one_trip(date0, from0, stopover)
   if len(part1) == 0:
     return []
@@ -192,20 +196,12 @@ def try_stopover(date0, from0, to0, stopover, price_limit=1500, time_limit=20):
 
   for result1 in part1:
     for result2 in part2:
-      if result1['price'] + result2['price'] > price_limit:
-        # too expensive
-        continue
-
       layover_time = hours(result2['depart'] - result1['arrive'])
       if layover_time < 1:
         # layover is too short
         continue
 
       total_time = result1['time'] + result2['time'] + layover_time
-      if total_time > time_limit:
-        # too long
-        continue
-
       new_layover = {'airport': stopover, 'layover': layover_time}
 
       new_result = {
@@ -224,9 +220,6 @@ def try_stopover(date0, from0, to0, stopover, price_limit=1500, time_limit=20):
   return stopover_results
 
 def keep_best(results):
-  # print("keep_best")
-  # pprint(results)
-  # print("\n")
   if len(results) == 0:
     return []
 
@@ -238,7 +231,6 @@ def keep_best(results):
   for result in results[1:]:
     prev_time = reduced_results[-1]['time']
     if result['time'] >= prev_time:
-      # print("removing {} because it is worse than {}".format(result['flights'], reduced_results[-1]['flights']))
       continue
     reduced_results.append(result)
 
@@ -247,20 +239,15 @@ def keep_best(results):
 def run(date0, from0, to0):
   # first, try the regular route with no stopover
   all_results = one_trip(date0, from0, to0)
-  print("Finished direct trip")
+  # print("Finished direct trip")
 
   # then, try with stopovers
   for stopover in stopovers:
     # eliminate strictly worse results
     all_results = keep_best(all_results)
-    print("Currently {} results".format(len(all_results)))
+    pprint(all_results)
 
-    price_limit = get_price_limit(all_results)
-    time_limit = get_time_limit(all_results)
-
-    stopover_results = try_stopover(date0, from0, to0, stopover=stopover, price_limit=price_limit, time_limit=time_limit)
-    print("Finished {} stopover".format(stopover))
-
+    stopover_results = try_stopover(date0, from0, to0, stopover=stopover)
     all_results = all_results + stopover_results
 
   return keep_best(all_results)
