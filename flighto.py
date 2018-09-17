@@ -244,6 +244,9 @@ def one_trip(date, frm, to, arriving=False, departing=False):
 #   price: USD,
 # }]
 def try_stopover(date, frm, to, stopover):
+  if frm == stopover or to == stopover:
+    return []
+
   part1 = one_trip(date, frm, stopover, departing=True)
   if len(part1) == 0:
     return []
