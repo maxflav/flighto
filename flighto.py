@@ -59,7 +59,7 @@ def one_query(date, frm, to, offset='', arriving=False, departing=False):
   try:
     print(int(time.time()), 'requesting', url, payload)
     r = requests.post(url, headers=headers, data=payload)
-    time.sleep(10)  # originally 2.5
+    time.sleep(15)  # originally 2.5
   except (KeyboardInterrupt, SystemExit):
     raise
   except:
@@ -280,15 +280,15 @@ def keep_best(results):
 
   return reduced_results
 
-def run(date, frm, to, skipdirect):
+def run(date, frm, fromcity, to, tocity, skipdirect):
   if skipdirect:
     all_results = []
   else:
     # first, try the regular route with no stopover
-    all_results = one_trip(date, frm, to, arriving=True, departing=True)
+    all_results = one_trip(date, fromcity or frm, tocity or to, arriving=True, departing=True)
   
   prev_results = all_results[:]
-  stopovers = airports.get_airports_between(frm, to)
+  stopovers = airports.get_airports_between(frm, to, max_dist=250)
   print(stopovers)
 
   # then, try with stopovers
@@ -299,7 +299,7 @@ def run(date, frm, to, skipdirect):
       pprint(all_results)
     prev_results = all_results[:]
 
-    stopover_results = try_stopover(date, frm, to, stopover=stopover)
+    stopover_results = try_stopover(date, fromcity or frm, tocity or to, stopover=stopover)
     all_results = all_results + stopover_results
 
   return keep_best(all_results)
@@ -307,7 +307,9 @@ def run(date, frm, to, skipdirect):
 parser = argparse.ArgumentParser()
 parser.add_argument('--date', type=str, help='e.g. 11/21/2018', required=True)
 parser.add_argument('--from', type=str, help='e.g. BCN', required=True, dest='frm')
+parser.add_argument('--fromcity', type=str, help='Hipmunk allows cities e.g. QSF, NYC')
 parser.add_argument('--to', type=str, help='e.g. MDT', required=True)
+parser.add_argument('--tocity', type=str, help='e.g. QSF/NYC')
 parser.add_argument('--departbefore', type=str, help='HHMM e.g. 2030, for 8:30pm')
 parser.add_argument('--departafter', type=str)
 parser.add_argument('--arrivebefore', type=str)
@@ -329,6 +331,8 @@ maxtime = args.maxtime
 pprint(run(
   date=args.date,
   frm=args.frm,
+  fromcity=args.fromcity,
   to=args.to,
+  tocity=args.tocity,
   skipdirect=args.skipdirect,
 ))
