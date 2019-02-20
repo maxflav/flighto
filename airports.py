@@ -24,7 +24,7 @@ def haversine(latlon1, latlon2):
     return c * r
 
 
-def get_airports_between(origin, dest, max_dist=150):
+def get_airports_between(origin_code, dest_code, max_dist=150):
     airport_locations = {}
     with open('airports.csv') as csvfile:
         for row in csv.reader(csvfile):
@@ -36,15 +36,18 @@ def get_airports_between(origin, dest, max_dist=150):
 
             airport_locations[iata] = (float(latitude), float(longitude))
 
-    origin = airport_locations[origin]
-    destination = airport_locations[dest]
+    origin_latlon = airport_locations[origin_code]
+    dest_latlon = airport_locations[dest_code]
 
-    total_dist = haversine(origin, destination)
+    total_dist = haversine(origin_latlon, dest_latlon)
     stopovers = []
 
-    for airport, latlon in airport_locations.items():
-        newdist = haversine(origin, latlon) + haversine(latlon, destination)
+    for airport_code, latlon in airport_locations.items():
+        if airport_code == origin_code or airport_code == dest_code:
+            continue
+
+        newdist = haversine(origin_latlon, latlon) + haversine(latlon, dest_latlon)
         if newdist - total_dist < max_dist:
-            stopovers.append(airport)
+            stopovers.append(airport_code)
 
     return stopovers
