@@ -57,9 +57,9 @@ def one_query(date, frm, to, offset='', arriving=False, departing=False):
     payload['offset'] = offset
 
   try:
-    print('requesting', url, payload)
-    time.sleep(2.5)
+    print(int(time.time()), 'requesting', url, payload)
     r = requests.post(url, headers=headers, data=payload)
+    time.sleep(10)  # originally 2.5
   except (KeyboardInterrupt, SystemExit):
     raise
   except:
@@ -215,7 +215,7 @@ def try_stopover(date, frm, to, stopover):
   if len(part1) == 0:
     return []
 
-  part2 = one_trip(date, stopover, to, arriving=True)
+  part2 = one_trip(date + "+1", stopover, to, arriving=True)
   if len(part2) == 0:
     return []
 
@@ -237,7 +237,7 @@ def try_stopover(date, frm, to, stopover):
         continue
 
       total_price = result1['price'] + result2['price']
-      if total_price > maxprice:
+      if maxprice and total_price > maxprice:
         # too expensive
         continue
 
@@ -280,17 +280,23 @@ def keep_best(results):
 
   return reduced_results
 
-def run(date, frm, to):
-  # first, try the regular route with no stopover
-  all_results = one_trip(date, frm, to, arriving=True, departing=True)
-
+def run(date, frm, to, skipdirect):
+  if skipdirect:
+    all_results = []
+  else:
+    # first, try the regular route with no stopover
+    all_results = one_trip(date, frm, to, arriving=True, departing=True)
+  
+  prev_results = all_results[:]
   stopovers = airports.get_airports_between(frm, to)
 
   # then, try with stopovers
   for stopover in stopovers:
     # eliminate strictly worse results
     all_results = keep_best(all_results)
-    pprint(all_results)
+    if all_results != prev_results:
+      pprint(all_results)
+    prev_results = all_results[:]
 
     stopover_results = try_stopover(date, frm, to, stopover=stopover)
     all_results = all_results + stopover_results
@@ -307,6 +313,7 @@ parser.add_argument('--arrivebefore', type=str)
 parser.add_argument('--arriveafter', type=str)
 parser.add_argument('--maxprice', type=int, help='USD e.g. 1000')
 parser.add_argument('--maxtime', type=int, help='in hours, e.g. 20')
+parser.add_argument('--skipdirect', help='Don\'t try the direct route', action='store_true')
 
 args = parser.parse_args()
 
@@ -321,5 +328,6 @@ maxtime = args.maxtime
 pprint(run(
   date=args.date,
   frm=args.frm,
-  to=args.to
+  to=args.to,
+  skipdirect=args.skipdirect,
 ))
