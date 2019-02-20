@@ -289,6 +289,7 @@ def run(date, frm, to, skipdirect):
   
   prev_results = all_results[:]
   stopovers = airports.get_airports_between(frm, to)
+  print(stopovers)
 
   # then, try with stopovers
   for stopover in stopovers:
