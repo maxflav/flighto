@@ -81,7 +81,9 @@ def one_query(date, frm, to, offset='', arriving=False, departing=False):
   if 'routings' in response:
     routings.update(response['routings'])
   if 'legs' in response:
-    legs.update(response['legs'])
+    for new_leg, new_leg_data in response['legs'].items():
+      if new_leg not in legs:
+        legs[new_leg] = new_leg_data
 
   if 'itins' in response:
     itins = response['itins'].values()
@@ -93,7 +95,7 @@ def one_query(date, frm, to, offset='', arriving=False, departing=False):
   results = []
 
   for itin in itins:
-    if not itin: 
+    if not itin:
       continue
     if 'routing_idens' not in itin:
       continue
@@ -281,6 +283,9 @@ def keep_best(results):
   return reduced_results
 
 def run(date, frm, fromcity, to, tocity, skipdirect):
+  stopovers = airports.get_airports_between(frm, to, max_dist=250)
+  print("Going to try these stopovers:", stopovers)
+
   if skipdirect:
     all_results = []
   else:
@@ -288,8 +293,6 @@ def run(date, frm, fromcity, to, tocity, skipdirect):
     all_results = one_trip(date, fromcity or frm, tocity or to, arriving=True, departing=True)
   
   prev_results = all_results[:]
-  stopovers = airports.get_airports_between(frm, to, max_dist=250)
-  print(stopovers)
 
   # then, try with stopovers
   for stopover in stopovers:
