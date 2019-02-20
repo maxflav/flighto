@@ -1,47 +1,11 @@
+from math import floor
 from pprint import pprint
+import airports
 import argparse
 import dateutil.parser
-import math
 import requests
 import sys
 import time
-
-stopovers = [
-  'AMS',
-  'ATL',
-  'BER',
-  'BOS',
-  'BWI',
-  'CDG',
-  'CLT',
-  'DCA',
-  'DEN',
-  'DFW',
-  'DTW',
-  'DUB',
-  'EWR',
-  'FCO',
-  'FRA',
-  'IAD',
-  'JFK',
-  'LGA',
-  'LGW',
-  'LHR',
-  'LIS',
-  'MAN',
-  'MCO',
-  'MDW',
-  'OPO',
-  'ORD',
-  'PDL',
-  'PHL',
-  'PIT',
-  'PVD',
-  'RDU',
-  'YHZ',
-  'YYT',
-  'YYZ',
-]
 
 exclude_airlines = ['']
 
@@ -76,7 +40,7 @@ maxtime = None
 
 # approximate to 2 decimals
 def hours(minutes):
-  return math.floor(minutes / 36) / 100
+  return floor(minutes / 36) / 100
 
 # ([trips], done=True/False, last_offset)
 def one_query(date, frm, to, offset='', arriving=False, departing=False):
@@ -319,6 +283,8 @@ def keep_best(results):
 def run(date, frm, to):
   # first, try the regular route with no stopover
   all_results = one_trip(date, frm, to, arriving=True, departing=True)
+
+  stopovers = airports.get_airports_between(frm, to)
 
   # then, try with stopovers
   for stopover in stopovers:
