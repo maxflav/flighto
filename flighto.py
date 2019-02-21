@@ -1,7 +1,7 @@
 from math import floor
 from pprint import pprint
-import airports
 import argparse
+import csv
 import dateutil.parser
 import requests
 import sys
@@ -283,9 +283,13 @@ def keep_best(results):
   return reduced_results
 
 def run(date, frm, fromcity, to, tocity, skipdirect, skipairports):
-  stopovers = airports.get_airports_between(frm, to, max_dist=250)
-  if skipairports:
-    stopovers = set(stopovers) - set(skipairports)
+  skipairports = set(skipairports)
+  stopovers = []
+  with open('airports.csv') as csvfile:
+    for row in csv.reader(csvfile):
+        [iata, latitude, longitude] = row
+        if iata not in skipairports:
+          stopovers.append(iata)
 
   stopovers = sorted(stopovers)
   print("Going to try these stopovers:", stopovers)

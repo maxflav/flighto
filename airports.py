@@ -26,14 +26,9 @@ def haversine(latlon1, latlon2):
 
 def get_airports_between(origin_code, dest_code, max_dist=150):
     airport_locations = {}
-    with open('airports.csv') as csvfile:
+    with open('old_airports.csv') as csvfile:
         for row in csv.reader(csvfile):
-            [airport_id, name, city, country, iata, icao, latitude, longitude, \
-            altitude, timezone, dst, tz, airport_type, source] = row
-
-            if iata[0] == "\\":
-                continue
-
+            [iata, latitude, longitude] = row
             airport_locations[iata] = (float(latitude), float(longitude))
 
     origin_latlon = airport_locations[origin_code]
