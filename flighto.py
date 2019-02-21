@@ -59,7 +59,7 @@ def one_query(date, frm, to, offset='', arriving=False, departing=False):
   try:
     print(int(time.time()), 'requesting', url, payload)
     r = requests.post(url, headers=headers, data=payload)
-    time.sleep(15)  # originally 2.5
+    time.sleep(20)  # originally 2.5
   except (KeyboardInterrupt, SystemExit):
     raise
   except:
@@ -282,8 +282,12 @@ def keep_best(results):
 
   return reduced_results
 
-def run(date, frm, fromcity, to, tocity, skipdirect):
+def run(date, frm, fromcity, to, tocity, skipdirect, skipairports):
   stopovers = airports.get_airports_between(frm, to, max_dist=250)
+  if skipairports:
+    stopovers = set(stopovers) - set(skipairports)
+
+  stopovers = sorted(stopovers)
   print("Going to try these stopovers:", stopovers)
 
   if skipdirect:
@@ -320,6 +324,7 @@ parser.add_argument('--arriveafter', type=str)
 parser.add_argument('--maxprice', type=int, help='USD e.g. 1000')
 parser.add_argument('--maxtime', type=int, help='in hours, e.g. 20')
 parser.add_argument('--skipdirect', help='Don\'t try the direct route', action='store_true')
+parser.add_argument('--skip', type=str, nargs='+', help='A list of airports to skip, separated by spaces?')
 
 args = parser.parse_args()
 
@@ -338,4 +343,5 @@ pprint(run(
   to=args.to,
   tocity=args.tocity,
   skipdirect=args.skipdirect,
+  skipairports=args.skip,
 ))
