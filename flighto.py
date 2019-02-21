@@ -52,6 +52,8 @@ def one_query(date, frm, to, offset='', arriving=False, departing=False):
 
   if offset == '':
     url = first_url
+    legs = {}
+    routings = {}
   else:
     url = search_url
     payload['offset'] = offset
