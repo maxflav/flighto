@@ -7,7 +7,7 @@ import requests
 import sys
 import time
 
-exclude_airlines = ['']
+exclude_airlines = ['NK']
 
 first_url = 'http://www.hipmunk.com/api/flights/v3/load_search_first'
 search_url = 'http://www.hipmunk.com/api/flights/v3/load_search'
@@ -282,7 +282,7 @@ def keep_best(results):
 
   return reduced_results
 
-def run(date, frm, fromcity, to, tocity, skipdirect, skipairports):
+def run(date, frm, fromcity, to, tocity, skipdirect, skipairports=[]):
   skipairports = set(skipairports)
   stopovers = []
   with open('airports.csv') as csvfile:
@@ -347,5 +347,5 @@ pprint(run(
   to=args.to,
   tocity=args.tocity,
   skipdirect=args.skipdirect,
-  skipairports=args.skip,
+  skipairports=args.skip or [],
 ))
