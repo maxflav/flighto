@@ -38,12 +38,15 @@ arriveafter = None
 maxprice = None
 maxtime = None
 
+verbose = False
+
 # approximate to 2 decimals
 def hours(minutes):
   return floor(minutes / 36) / 100
 
 # ([trips], done=True/False, last_offset)
 def one_query(date, frm, to, offset='', arriving=False, departing=False):
+  if verbose: print('one_query')
   global routings
   global legs
   payload = {
@@ -63,7 +66,9 @@ def one_query(date, frm, to, offset='', arriving=False, departing=False):
   try:
     print(int(time.time()), 'requesting', url, payload)
     r = requests.post(url, headers=headers, data=payload)
+    if verbose: print('sleeping 20')
     time.sleep(20)  # originally 2.5
+    if verbose: print('done sleeping')
   except (KeyboardInterrupt, SystemExit):
     raise
   except:
@@ -71,6 +76,7 @@ def one_query(date, frm, to, offset='', arriving=False, departing=False):
     return ([], True, '')
 
   try:
+    if verbose: print('parsing json')
     response = r.json()
   except (KeyboardInterrupt, SystemExit):
     raise
@@ -78,18 +84,23 @@ def one_query(date, frm, to, offset='', arriving=False, departing=False):
     print('failed to decode json', sys.exc_info()[0], r.text)
     return ([], True, '')
 
+  if verbose: print('done parsing json')
+
   if 'errors' in response:
     print(response['errors'])
     return ([], True, '')
 
   if 'routings' in response:
+    if verbose: print('updating routings')
     routings.update(response['routings'])
   if 'legs' in response:
+    if verbose: print('updating legs')
     for new_leg, new_leg_data in response['legs'].items():
       if new_leg not in legs:
         legs[new_leg] = new_leg_data
 
   if 'itins' in response:
+    if verbose: print('getting itin values')
     itins = response['itins'].values()
   else:
     return ([], True, '')
@@ -103,6 +114,7 @@ def one_query(date, frm, to, offset='', arriving=False, departing=False):
       continue
     if 'routing_idens' not in itin:
       continue
+    if verbose: print('handling itin')
     routing_iden = itin['routing_idens'][0]
     my_routing = routings[routing_iden]
     leg_idens = my_routing['leg_idens']
@@ -114,6 +126,7 @@ def one_query(date, frm, to, offset='', arriving=False, departing=False):
     skip_itin = False
     # calculate layovers
     for i, leg in enumerate(my_legs):
+      if verbose: print('handling leg {}'.format(i))
       if 'from_code' not in leg or 'to_code' not in leg:
         print('leg is missing from_code or to_code?')
         pprint(leg)
@@ -125,6 +138,7 @@ def one_query(date, frm, to, offset='', arriving=False, departing=False):
       if i > 0:
         # not the first one
         prev_leg = my_legs[i - 1]
+        if verbose: print('appending to layovers')
         layovers.append({
           'airport': from_code,
           'layover': hours(leg['depart'] - prev_leg['arrive']),
@@ -135,6 +149,7 @@ def one_query(date, frm, to, offset='', arriving=False, departing=False):
       if airline in exclude_airlines:
         skip_itin = True
         break
+      if verbose: print('appending to flights')
       flights.append(airline + str(flight_no))
 
     if skip_itin:
@@ -167,6 +182,7 @@ def one_query(date, frm, to, offset='', arriving=False, departing=False):
       if departafter and depart_hhmm < departafter:
         continue
 
+    if verbose: print('appending to results')
     results.append({
       'arrive_iso': arrive_iso,
       'depart_iso': depart_iso,
@@ -191,6 +207,7 @@ def one_query(date, frm, to, offset='', arriving=False, departing=False):
 #   price: USD,
 # }]
 def one_trip(date, frm, to, arriving=False, departing=False):
+  if verbose: print('one_trip')
   if frm == to:
     return []
 
@@ -199,6 +216,7 @@ def one_trip(date, frm, to, arriving=False, departing=False):
   all_results = []
   while not done:
     (partial_results, done, offset) = one_query(date, frm, to, offset, arriving=arriving, departing=departing)
+    if verbose: print('adding partial_results to all_results')
     all_results += partial_results
 
   return all_results
@@ -214,6 +232,7 @@ def one_trip(date, frm, to, arriving=False, departing=False):
 #   price: USD,
 # }]
 def try_stopover(date, frm, to, stopover):
+  if verbose: print('try_stopover')
   if frm == stopover or to == stopover:
     return []
 
@@ -225,8 +244,10 @@ def try_stopover(date, frm, to, stopover):
   if len(part2) == 0:
     return []
 
+  if verbose: print('sorting parts')
   part1 = sorted(part1, key=lambda result: result['arrive'])
   part2 = sorted(part2, key=lambda result: result['depart'])
+  if verbose: print('done sorting')
 
   stopover_results = []
 
@@ -259,11 +280,13 @@ def try_stopover(date, frm, to, stopover):
         'price': total_price,
         'time': total_time,
       }
+      if verbose: print('appending new result')
       stopover_results.append(new_result)
 
   return stopover_results
 
 def keep_best(results):
+  if verbose: print('keep_best')
   if len(results) == 0:
     return []
 
@@ -333,6 +356,7 @@ parser.add_argument('--maxprice', type=int, help='USD e.g. 1000')
 parser.add_argument('--maxtime', type=int, help='in hours, e.g. 20')
 parser.add_argument('--skipdirect', help='Don\'t try the direct route', action='store_true')
 parser.add_argument('--skip', type=str, nargs='+', help='A list of airports to skip, separated by spaces?')
+parser.add_argument('--verbose', help='A list of airports to skip, separated by spaces?', action='store_true')
 
 args = parser.parse_args()
 
@@ -343,6 +367,7 @@ arriveafter = args.arriveafter
 
 maxprice = args.maxprice
 maxtime = args.maxtime
+verbose = args.verbose
 
 pprint(run(
   date=args.date,
