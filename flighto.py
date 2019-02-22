@@ -233,7 +233,7 @@ def try_stopover(date, frm, to, stopover):
   for result1 in part1:
     for result2 in part2:
       layover_time = hours(result2['depart'] - result1['arrive'])
-      if layover_time < 2:
+      if layover_time < 1.5:
         # layover is too short
         continue
 
