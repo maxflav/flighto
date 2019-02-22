@@ -44,6 +44,8 @@ def hours(minutes):
 
 # ([trips], done=True/False, last_offset)
 def one_query(date, frm, to, offset='', arriving=False, departing=False):
+  global routings
+  global legs
   payload = {
     'date0': date,
     'from0': frm,
