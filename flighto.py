@@ -64,7 +64,7 @@ def one_query(date, frm, to, offset='', arriving=False, departing=False):
   try:
     print(int(time.time()), 'requesting', url, payload)
     r = requests.post(url, headers=headers, data=payload)
-    time.sleep(20)  # originally 2.5
+    time.sleep(25)
   except (KeyboardInterrupt, SystemExit):
     raise
   except:
