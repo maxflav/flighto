@@ -62,9 +62,8 @@ def one_query(date, frm, to, offset='', arriving=False, departing=False):
     payload['offset'] = offset
 
   try:
-    print(int(time.time()), 'requesting', url, payload)
     r = requests.post(url, headers=headers, data=payload)
-    time.sleep(25)
+    time.sleep(30)
   except (KeyboardInterrupt, SystemExit):
     raise
   except:
@@ -96,7 +95,6 @@ def one_query(date, frm, to, offset='', arriving=False, departing=False):
   else:
     return ([], True, '')
 
-  print('got {} itins'.format(len(itins)))
   # construct my results from these itin objects
   results = []
 
@@ -180,7 +178,6 @@ def one_query(date, frm, to, offset='', arriving=False, departing=False):
       'time': hr,
     })
 
-  print('got {} viable results'.format(len(results)))
   return (results, response['done'], response['last_offset'])
 
 # [{
@@ -203,6 +200,7 @@ def one_trip(date, frm, to, arriving=False, departing=False):
     (partial_results, done, offset) = one_query(date, frm, to, offset, arriving=arriving, departing=departing)
     all_results += partial_results
 
+  print(int(time.time()), date, frm, to, len(all_results))
   return all_results
 
 # same return value as one_trip
